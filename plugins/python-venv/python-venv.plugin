@@ -1,0 +1,10 @@
+[Plugin]
+Module=python-venv
+Name=Python Virtual Environment
+Description=Python Virtual Environments as Runtime
+Version=0.1.0
+Authors=Wissle <jongsome@gmail.com>
+Copyright=Copyright (c) 2025 Wissle
+Builtin=false
+X-Builder-ABI=48
+X-Category=sdks

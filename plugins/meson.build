@@ -15,3 +15,5 @@ if plugindir == ''
 endif
 
 message('Plugins will be installed at : ', plugindir)
+
+subdir('python-venv')
