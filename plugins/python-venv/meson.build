@@ -14,4 +14,9 @@ python_venv_plugin = shared_module('python-venv', python_venv_plugin_srcs, pytho
     install:             true,
     install_dir:         python_venv_plugin_dir)
 
+gnome.compile_schemas(
+    build_by_default: true,
+    depend_files: 'org.gnome.builder.PythonVenv.gschema.xml')
+
 install_data('python-venv.plugin', install_dir: python_venv_plugin_dir)
+install_data(['org.gnome.builder.PythonVenv.gschema.xml'], install_dir: schemadir)

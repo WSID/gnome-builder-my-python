@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.builder.PythonVenv" path="/org/gnome/builder/PythonVenv/">
+    <key name="python-venvs" type="as">
+      <default>[]</default>
+      <summary>Python Virtual Environments</summary>
+      <description>Vritual Environments that created from "python -m venv"</description>
+    </key>
+  </schema>
+</schemalist>

@@ -1,1 +1,2 @@
 option('plugindir', type: 'string', description: 'Directory to place plugin.')
+option('schemadir', type: 'string', description: 'Directory to place gsettings schema.')
