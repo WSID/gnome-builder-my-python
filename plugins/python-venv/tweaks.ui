@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <template class="IdeTweaks">
+    <child internal-child="foundry_section">
+      <object class="IdeTweaksSection">
+        <child>
+          <object class="IdeTweaksPage" id="python_venv_page">
+            <property name="title">Python Virtual Environments</property>
+            <child>
+              <object class="IdeTweaksGroup">
+                <property name="title">Python Virtual Environments</property>
+                <child>
+                  <object class="IdeTweaksCaption">
+                    <property name="text"> Hello Tweaks! </property>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+    </child>
+  </template>
+</interface>

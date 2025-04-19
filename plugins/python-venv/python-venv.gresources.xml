@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<gresources>
+  <gresource prefix="/plugins/python-venv">
+    <file preprocess="xml-stripblanks">tweaks.ui</file>
+  </gresource>
+</gresources>
