@@ -15,6 +15,8 @@ struct _GbmpPythonVenvApplicationAddin
   GHashTable *table_path_data;
 };
 
+static GbmpPythonVenvApplicationAddin *instance = NULL;
+
 static void
 _ide_application_addin_iface_init (IdeApplicationAddinInterface *iface);
 
@@ -60,6 +62,14 @@ _setup_python_venvs_data_new (GObject      *source,
 static void
 _setup_python_venvs_data_new_then (ClosureVenvsDataNew *closure);
 
+//////// Public functions
+
+GbmpPythonVenvApplicationAddin *
+gbmp_python_venv_application_addin_get_instance (void)
+{
+  return instance;
+}
+
 /////// GTypeInstance
 
 G_DEFINE_FINAL_TYPE_WITH_CODE (GbmpPythonVenvApplicationAddin,
@@ -102,6 +112,15 @@ _g_object_finalize (GObject *object)
   parent_class = G_OBJECT_CLASS (gbmp_python_venv_application_addin_parent_class);
   addin = GBMP_PYTHON_VENV_APPLICATION_ADDIN (object);
 
+  if (instance == addin)
+    {
+      instance = NULL;
+    }
+  else
+    {
+      g_warning ("Stored instance is not equal to this!");
+    }
+
   g_clear_object (&addin->settings);
   g_clear_pointer (&addin->table_path_data, g_hash_table_unref);
 
@@ -137,6 +156,12 @@ _ide_application_addin_load (IdeApplicationAddin *self,
                        (const gchar * const *)list_venvs);
 
   g_strfreev (list_venvs);
+
+  if (instance != NULL)
+    {
+      g_critical ("Instance is not null! CRITICAL");
+    }
+  instance = g_object_ref(addin);
 }
 
 

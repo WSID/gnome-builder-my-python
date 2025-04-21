@@ -11,4 +11,7 @@ G_DECLARE_FINAL_TYPE (GbmpPythonVenvApplicationAddin,
                       GBMP, PYTHON_VENV_APPLICATION_ADDIN,
                       GObject)
 
+GbmpPythonVenvApplicationAddin *
+gbmp_python_venv_application_addin_get_instance (void);
+
 G_END_DECLS
