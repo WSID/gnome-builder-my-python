@@ -1,10 +1,18 @@
 #include "gbmp-python-venv-application-addin.h"
 
+#include "gbmp-python-venv-data.h"
+
+#undef G_LOG_DOMAIN
+#define G_LOG_DOMAIN "gbmp-python-venv-application-addin"
+
 struct _GbmpPythonVenvApplicationAddin
 {
   GObject parent_instance;
 
   GSettings *settings;
+  gboolean python_venvs_is_setting;
+
+  GHashTable *table_path_data;
 };
 
 static void
@@ -23,6 +31,34 @@ static void
 _ide_application_addin_load (IdeApplicationAddin *addin,
                              IdeApplication      *application);
 
+//////// Privates
+
+static void
+_settings_python_venvs_changed (GSettings *settings,
+                                gchar     *key,
+                                gpointer   user_data);
+
+static void
+_setup_python_venvs (GbmpPythonVenvApplicationAddin *addin,
+                     const gchar * const            *python_venvs);
+
+static void
+_setup_python_venvs_remove_create (gpointer key,
+                                   gpointer value,
+                                   gpointer user_data);
+
+typedef struct _ClosureVenvsDataNew {
+  GbmpPythonVenvApplicationAddin *addin;
+  guint                           num_left_running;
+} ClosureVenvsDataNew;
+
+static void
+_setup_python_venvs_data_new (GObject      *source,
+                              GAsyncResult *result,
+                              gpointer      user_data);
+
+static void
+_setup_python_venvs_data_new_then (ClosureVenvsDataNew *closure);
 
 /////// GTypeInstance
 
@@ -67,6 +103,7 @@ _g_object_finalize (GObject *object)
   addin = GBMP_PYTHON_VENV_APPLICATION_ADDIN (object);
 
   g_clear_object (&addin->settings);
+  g_clear_pointer (&addin->table_path_data, g_hash_table_unref);
 
   parent_class->finalize(object);
 }
@@ -80,8 +117,200 @@ _ide_application_addin_load (IdeApplicationAddin *self,
 {
   GbmpPythonVenvApplicationAddin *addin = NULL;
 
+  gchar **list_venvs = NULL;
+
   addin = GBMP_PYTHON_VENV_APPLICATION_ADDIN (self);
 
   addin->settings = g_settings_new ("org.gnome.builder.PythonVenv");
+  addin->table_path_data = g_hash_table_new_full (g_str_hash,
+                                                  g_str_equal,
+                                                  g_free,
+                                                  g_object_unref);
+
+  g_signal_connect (addin->settings,
+                    "changed::python-venvs",
+                    (GCallback) _settings_python_venvs_changed,
+                    addin);
+
+  list_venvs = g_settings_get_strv (addin->settings, "python-venvs");
+  _setup_python_venvs (addin,
+                       (const gchar * const *)list_venvs);
+
+  g_strfreev (list_venvs);
 }
 
+
+
+//////// Privates
+
+
+
+static void
+_settings_python_venvs_changed (GSettings *settings,
+                                gchar     *key,
+                                gpointer   user_data)
+{
+  GbmpPythonVenvApplicationAddin *addin = NULL;
+
+  gchar **python_venvs = NULL;
+
+  addin = GBMP_PYTHON_VENV_APPLICATION_ADDIN (user_data);
+
+  if (! addin->python_venvs_is_setting)
+    {
+      python_venvs = g_settings_get_strv (addin->settings, "python-venvs");
+      _setup_python_venvs (addin,
+                           (const gchar * const *)python_venvs);
+
+    }
+}
+
+static void
+_setup_python_venvs (GbmpPythonVenvApplicationAddin *addin,
+                     const gchar * const            *python_venvs)
+{
+  GHashTable *table_remove_create = NULL;
+  GList *prev_paths = NULL;
+  GList *prev_paths_iter = NULL;
+
+  const gchar * const *python_venvs_iter = NULL;
+  ClosureVenvsDataNew *closure = NULL;
+
+  // Take what to remove and what to create.
+  table_remove_create = g_hash_table_new (g_str_hash, g_str_equal);
+
+  prev_paths = g_hash_table_get_keys (addin->table_path_data);
+  prev_paths_iter = prev_paths;
+
+  while (prev_paths_iter != NULL)
+    {
+      g_hash_table_insert (table_remove_create,
+                           prev_paths_iter->data,
+                           (gpointer) -1);
+
+      prev_paths_iter = prev_paths_iter->next;
+    }
+  g_list_free (prev_paths);
+
+  if (python_venvs != NULL)
+    {
+      python_venvs_iter = python_venvs;
+      while (*python_venvs_iter != NULL)
+        {
+          gintptr retain_or_create = 0;
+          retain_or_create = (gintptr) g_hash_table_lookup (table_remove_create,
+                                                            (gpointer) *python_venvs_iter);
+          retain_or_create ++;
+          g_hash_table_insert (table_remove_create,
+                               (gpointer) *python_venvs_iter,
+                               (gpointer) retain_or_create);
+
+          python_venvs_iter++;
+        }
+    }
+
+  // Perform remove and create.
+  closure = g_new(ClosureVenvsDataNew, 1);
+  closure->addin = g_object_ref (addin);
+  closure->num_left_running = 0;
+
+  g_hash_table_foreach (table_remove_create,
+                        _setup_python_venvs_remove_create,
+                        closure);
+
+  if (closure->num_left_running == 0)
+    {
+      _setup_python_venvs_data_new_then (closure);
+    }
+
+  g_hash_table_unref (table_remove_create);
+}
+
+static void
+_setup_python_venvs_remove_create (gpointer key,
+                                   gpointer value,
+                                   gpointer user_data)
+{
+  ClosureVenvsDataNew *closure = NULL;
+  const gchar *path = NULL;
+  gintptr remove_or_create = 0;
+
+  closure = (ClosureVenvsDataNew *) user_data;
+  path = (const gchar *) key;
+  remove_or_create = (gintptr) value;
+
+  if (remove_or_create == -1)
+    {
+      g_hash_table_remove (closure->addin->table_path_data, path);
+    }
+  else if (remove_or_create == 1)
+    {
+      closure->num_left_running ++;
+      gbmp_python_venv_venv_data_new_async (path,
+                                            NULL, // Cancellable
+                                            _setup_python_venvs_data_new,
+                                            closure);
+    }
+}
+
+
+static void
+_setup_python_venvs_data_new (GObject      *source,
+                              GAsyncResult *result,
+                              gpointer      user_data)
+{
+  ClosureVenvsDataNew *closure = NULL;
+  GbmpPythonVenvVenvData *data = NULL;
+
+  gchar *path = NULL;
+
+  GError *error = NULL;
+
+  closure = (ClosureVenvsDataNew *)user_data;
+  data = gbmp_python_venv_venv_data_new_finish (source, result, &error);
+  if (error != NULL)
+    {
+      g_warning ("Virtual Env Init failed: %s", error->message);
+    }
+  else
+    {
+      g_object_get (data, "path", &path, NULL);
+
+      g_message ("Virtual Env Added : %s\n", path);
+      g_hash_table_insert (closure->addin->table_path_data, path, data);
+    }
+
+  closure->num_left_running --;
+
+  if (closure->num_left_running == 0)
+    {
+      _setup_python_venvs_data_new_then (closure);
+    }
+}
+
+static void
+_setup_python_venvs_data_new_then (ClosureVenvsDataNew *closure)
+{
+  GPtrArray *paths = NULL;
+  // Gather the result and set it back to settings.
+
+  paths = g_hash_table_get_keys_as_ptr_array (closure->addin->table_path_data);
+  g_ptr_array_sort (paths, (GCompareFunc) strcmp);
+
+  if (! g_ptr_array_is_null_terminated (paths))
+    {
+      g_ptr_array_add (paths, NULL);
+    }
+
+  closure->addin->python_venvs_is_setting = TRUE;
+
+  g_settings_set_strv (closure->addin->settings,
+                       "python-venvs",
+                       (const gchar * const *) paths->pdata);
+
+  closure->addin->python_venvs_is_setting = FALSE;
+
+  g_ptr_array_unref (paths);
+  g_object_unref (closure->addin);
+  g_free (closure);
+}
