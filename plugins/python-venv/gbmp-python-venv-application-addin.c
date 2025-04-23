@@ -20,6 +20,8 @@ static GbmpPythonVenvApplicationAddin *instance = NULL;
 static void
 _ide_application_addin_iface_init (IdeApplicationAddinInterface *iface);
 
+static guint sig_python_venv_added = 0;
+static guint sig_python_venv_removed = 0;
 
 //////// GObject
 
@@ -86,6 +88,31 @@ static void
 gbmp_python_venv_application_addin_class_init (GbmpPythonVenvApplicationAddinClass *c)
 {
   GObjectClass *c_g_object = G_OBJECT_CLASS (c);
+
+  // Signals
+
+  sig_python_venv_added = g_signal_new ("python-venv-added",
+                                        GBMP_TYPE_PYTHON_VENV_APPLICATION_ADDIN,
+                                        G_SIGNAL_RUN_LAST,
+                                        0,
+                                        NULL, NULL,
+                                        NULL,
+                                        G_TYPE_NONE,
+                                        1,
+                                        GBMP_TYPE_PYTHON_VENV_VENV_DATA);
+
+  sig_python_venv_removed = g_signal_new ("python-venv-removed",
+                                          GBMP_TYPE_PYTHON_VENV_APPLICATION_ADDIN,
+                                          G_SIGNAL_RUN_LAST,
+                                          0,
+                                          NULL, NULL,
+                                          NULL,
+                                          G_TYPE_NONE,
+                                          1,
+                                          GBMP_TYPE_PYTHON_VENV_VENV_DATA);
+
+  // GObject
+
   c_g_object->finalize = _g_object_finalize;
 }
 
@@ -260,12 +287,16 @@ _setup_python_venvs_remove_create (gpointer key,
   const gchar *path = NULL;
   gintptr remove_or_create = 0;
 
+  GbmpPythonVenvVenvData *data = NULL;
+
   closure = (ClosureVenvsDataNew *) user_data;
   path = (const gchar *) key;
   remove_or_create = (gintptr) value;
 
   if (remove_or_create == -1)
     {
+      data = GBMP_PYTHON_VENV_VENV_DATA (g_hash_table_lookup (closure->addin->table_path_data, path));
+      g_signal_emit (closure->addin, sig_python_venv_removed, 0, data);
       g_hash_table_remove (closure->addin->table_path_data, path);
     }
   else if (remove_or_create == 1)
@@ -299,10 +330,9 @@ _setup_python_venvs_data_new (GObject      *source,
     }
   else
     {
-
-      g_message ("Virtual Env Added : %s\n", path);
       path = g_strdup (gbmp_python_venv_venv_data_get_path (data));
       g_hash_table_insert (closure->addin->table_path_data, path, data);
+      g_signal_emit (closure->addin, sig_python_venv_added, 0, data);
     }
 
   closure->num_left_running --;
@@ -339,3 +369,4 @@ _setup_python_venvs_data_new_then (ClosureVenvsDataNew *closure)
   g_object_unref (closure->addin);
   g_free (closure);
 }
+
