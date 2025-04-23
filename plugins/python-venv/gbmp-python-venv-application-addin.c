@@ -72,6 +72,13 @@ gbmp_python_venv_application_addin_get_instance (void)
   return instance;
 }
 
+
+GPtrArray *
+gbmp_python_venv_application_addin_get_venv_datas (GbmpPythonVenvApplicationAddin *addin)
+{
+  return g_hash_table_get_values_as_ptr_array (addin->table_path_data);
+}
+
 /////// GTypeInstance
 
 G_DEFINE_FINAL_TYPE_WITH_CODE (GbmpPythonVenvApplicationAddin,
@@ -369,4 +376,5 @@ _setup_python_venvs_data_new_then (ClosureVenvsDataNew *closure)
   g_object_unref (closure->addin);
   g_free (closure);
 }
+
 

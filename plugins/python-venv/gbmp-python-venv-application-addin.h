@@ -14,4 +14,7 @@ G_DECLARE_FINAL_TYPE (GbmpPythonVenvApplicationAddin,
 GbmpPythonVenvApplicationAddin *
 gbmp_python_venv_application_addin_get_instance (void);
 
+GPtrArray *
+gbmp_python_venv_application_addin_get_venv_datas (GbmpPythonVenvApplicationAddin *addin);
+
 G_END_DECLS
