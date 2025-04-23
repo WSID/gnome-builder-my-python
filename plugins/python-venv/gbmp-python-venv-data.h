@@ -25,4 +25,10 @@ gbmp_python_venv_venv_data_new_finish (GObject       *source,
                                        GError       **error);
 
 
+const gchar *
+gbmp_python_venv_venv_data_get_path (const GbmpPythonVenvVenvData *data);
+
+const gchar *
+gbmp_python_venv_venv_data_get_prompt (const GbmpPythonVenvVenvData *data);
+
 G_END_DECLS

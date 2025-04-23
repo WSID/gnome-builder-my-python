@@ -92,6 +92,18 @@ gbmp_python_venv_venv_data_new_finish (GObject       *source,
   );
 }
 
+const gchar *
+gbmp_python_venv_venv_data_get_path (const GbmpPythonVenvVenvData *data)
+{
+  return data->path;
+}
+
+const gchar *
+gbmp_python_venv_venv_data_get_prompt (const GbmpPythonVenvVenvData *data)
+{
+  return data->prompt;
+}
+
 
 //////// GTypeInstance
 

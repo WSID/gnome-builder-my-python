@@ -299,9 +299,9 @@ _setup_python_venvs_data_new (GObject      *source,
     }
   else
     {
-      g_object_get (data, "path", &path, NULL);
 
       g_message ("Virtual Env Added : %s\n", path);
+      path = g_strdup (gbmp_python_venv_venv_data_get_path (data));
       g_hash_table_insert (closure->addin->table_path_data, path, data);
     }
 
