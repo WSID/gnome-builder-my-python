@@ -4,6 +4,8 @@ python_venv_plugin_srcs = files(
     ['python-venv-plugin.c',
      'gbmp-python-venv-application-addin.c',
      'gbmp-python-venv-data.c',
+     'gbmp-python-venv-runtime.c',
+     'gbmp-python-venv-runtime-provider.c',
      'gbmp-python-venv-tweaks-addin.c'])
 
 python_venv_plugin_incs = include_directories('.')
