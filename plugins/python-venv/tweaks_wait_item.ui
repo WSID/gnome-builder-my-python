@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <object class="GtkRevealer" id="content">
+    <property
+      name="reveal-child"
+      bind-source="GbmpPythonVenvTweaksAddin"
+      bind-property="is-adding-venv"
+      bind-flags="sync-create"/>
+
+    <child>
+      <object class="GtkBox">
+        <property name="margin-top">12</property>
+        <property name="orientation">GTK_ORIENTATION_HORIZONTAL</property>
+        <property name="spacing">24</property>
+
+        <child>
+          <object class="GtkLabel">
+            <property name="hexpand">true</property>
+            <property name="hexpand-set">true</property>
+            <property name="halign">start</property>
+            <property name="label">Adding Virtual Environment.</property>
+          </object>
+        </child>
+
+        <child>
+          <object class="GtkSpinner">
+            <property
+              name="spinning"
+              bind-source="GbmpPythonVenvTweaksAddin"
+              bind-property="is-adding-venv"
+              bind-flags="sync-create"/>
+          </object>
+        </child>
+      </object>
+    </child>
+  </object>
+</interface>

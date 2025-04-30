@@ -8,22 +8,33 @@
             <property name="title">Python Virtual Environments</property>
             <child>
               <object class="IdeTweaksGroup">
-                <!-- Caption -->
                 <child>
-                  <object class="IdeTweaksCaption">
-                    <property name="text"> Hello Tweaks! </property>
+                  <object class="IdeTweaksWidget">
+                    <signal
+                      name="create-for-item"
+                      handler="list_item_create_for_item"
+                      object="GbmpPythonVenvTweaksAddin"
+                      swapped="false"/>
                   </object>
                 </child>
 
                 <child>
                   <object class="IdeTweaksWidget">
-                    <signal name="create-for-item" handler="list_item_create_for_item" object="GbmpPythonVenvTweaksAddin" swapped="false"/>
+                    <signal
+                      name="create-for-item"
+                      handler="add_item_create_for_item"
+                      object="GbmpPythonVenvTweaksAddin"
+                      swapped="false"/>
                   </object>
                 </child>
 
                 <child>
                   <object class="IdeTweaksWidget">
-                    <signal name="create-for-item" handler="add_item_create_for_item" object="GbmpPythonVenvTweaksAddin" swapped="false"/>
+                    <signal
+                      name="create-for-item"
+                      handler="wait_item_create_for_item"
+                      object="GbmpPythonVenvTweaksAddin"
+                      swapped="false"/>
                   </object>
                 </child>
               </object>

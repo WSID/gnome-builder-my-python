@@ -5,10 +5,16 @@
     <property name="orientation">GTK_ORIENTATION_HORIZONTAL</property>
     <property name="homogeneous">true</property>
     <property name="spacing">24</property>
+    <property
+      name="sensitive"
+      bind-source="GbmpPythonVenvTweaksAddin"
+      bind-property="is-adding-venv"
+      bind-flags="sync-create | invert-boolean"/>
 
     <!-- Add Buttton : Add existing environment -->
     <child>
       <object class="GtkButton">
+
         <signal name="clicked" handler="add_button_clicked" object="GbmpPythonVenvTweaksAddin" swapped="false"/>
         <child>
           <object class="GtkLabel">
@@ -21,6 +27,7 @@
     <!-- Make Button : Make a python environment -->
     <child>
       <object class="GtkButton">
+
         <signal name="clicked" handler="make_button_clicked" object="GbmpPythonVenvTweaksAddin" swapped="false"/>
         <child>
           <object class="GtkLabel">
