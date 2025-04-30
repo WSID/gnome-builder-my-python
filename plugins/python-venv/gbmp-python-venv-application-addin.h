@@ -17,4 +17,28 @@ gbmp_python_venv_application_addin_get_instance (void);
 GPtrArray *
 gbmp_python_venv_application_addin_get_venv_datas (GbmpPythonVenvApplicationAddin *addin);
 
+void
+gbmp_python_venv_application_addin_add_python_venv_async (GbmpPythonVenvApplicationAddin *addin,
+                                                          GFile                          *directory,
+                                                          GCancellable                   *cancel,
+                                                          GAsyncReadyCallback             callback,
+                                                          gpointer                        user_data);
+
+gboolean
+gbmp_python_venv_application_addin_add_python_venv_finish (GbmpPythonVenvApplicationAddin  *addin,
+                                                           GAsyncResult                    *result,
+                                                           GError                         **error);
+
+void
+gbmp_python_venv_application_addin_make_python_venv_async (GbmpPythonVenvApplicationAddin *addin,
+                                                           GFile                          *directory,
+                                                           GCancellable                   *cancel,
+                                                           GAsyncReadyCallback             callback,
+                                                           gpointer                        user_data);
+
+gboolean
+gbmp_python_venv_application_addin_make_python_venv_finish (GbmpPythonVenvApplicationAddin  *addin,
+                                                            GAsyncResult                    *result,
+                                                            GError                         **error);
+
 G_END_DECLS

@@ -5,6 +5,43 @@
 #undef G_LOG_DOMAIN
 #define G_LOG_DOMAIN "gbmp-python-venv-application-addin"
 
+
+////////
+
+static void
+gbmp_python_venv_application_addin_add_python_venv_data_new (GObject      *source,
+                                                             GAsyncResult *result,
+                                                             gpointer      user_data);
+
+typedef struct
+{
+  IdeTask *task;
+  gchar   *path;
+}
+ClosureSetupDone;
+
+static void
+gbmp_python_venv_application_addin_make_python_venv_mkdir (GObject      *source,
+                                                           GAsyncResult *result,
+                                                           gpointer      user_data);
+
+static void
+gbmp_python_venv_application_addin_make_python_venv_setup (GbmpPythonVenvApplicationAddin *addin,
+                                                          gchar                           *path,
+                                                           IdeTask                        *task);
+
+static void
+gbmp_python_venv_application_addin_make_python_venv_setup_done (GObject      *source,
+                                                                GAsyncResult *result,
+                                                                gpointer      user_data);
+
+static void
+gbmp_python_venv_application_addin_make_python_venv_data_new (GObject      *source,
+                                                              GAsyncResult *result,
+                                                              gpointer      user_data);
+
+//////// GTypeInstance
+
 struct _GbmpPythonVenvApplicationAddin
 {
   GObject parent_instance;
@@ -24,6 +61,28 @@ static guint sig_python_venv_added = 0;
 static guint sig_python_venv_removed = 0;
 
 //////// GObject
+
+enum
+{
+  PROP_0,
+  PROP_PYTHON_VENV_DATAS,
+
+  N_PROPS
+};
+
+GParamSpec *props[N_PROPS] = { NULL };
+
+static void
+_g_object_get_property (GObject    *object,
+                        guint       prop_id,
+                        GValue     *value,
+                        GParamSpec *pspec);
+
+static void
+_g_object_set_property (GObject      *object,
+                        guint         prop_id,
+                        const GValue *value,
+                        GParamSpec   *pspec);
 
 static void
 _g_object_finalize (GObject *object);
@@ -64,6 +123,9 @@ _setup_python_venvs_data_new (GObject      *source,
 static void
 _setup_python_venvs_data_new_then (ClosureVenvsDataNew *closure);
 
+static void
+_update_settings (GbmpPythonVenvApplicationAddin *addin);
+
 //////// Public functions
 
 GbmpPythonVenvApplicationAddin *
@@ -77,6 +139,299 @@ GPtrArray *
 gbmp_python_venv_application_addin_get_venv_datas (GbmpPythonVenvApplicationAddin *addin)
 {
   return g_hash_table_get_values_as_ptr_array (addin->table_path_data);
+}
+
+
+void
+gbmp_python_venv_application_addin_add_python_venv_async (GbmpPythonVenvApplicationAddin *addin,
+                                                          GFile                          *directory,
+                                                          GCancellable                   *cancel,
+                                                          GAsyncReadyCallback             callback,
+                                                          gpointer                        user_data)
+{
+  IdeTask *task = NULL;
+  gchar *directory_path = NULL;
+  gboolean directory_exists = FALSE;
+  GFileType directory_type = G_FILE_TYPE_UNKNOWN;
+
+  task = ide_task_new (addin, cancel, callback, user_data);
+  if (ide_task_return_error_if_cancelled (task))
+    {
+      return;
+    }
+
+  // Check directory and get path.
+  directory_path = g_file_get_path (directory);
+  directory_exists = g_file_query_exists (directory, cancel);
+  if (! directory_exists)
+    {
+      ide_task_return_new_error (task,
+                                 G_IO_ERROR,
+                                 G_IO_ERROR_NOT_FOUND,
+                                 "Directory not found: %s",
+                                 directory_path);
+      g_free (directory_path);
+      return;
+    }
+
+  directory_type = g_file_query_file_type (directory,
+                                           G_FILE_QUERY_INFO_NONE,
+                                           cancel);
+  if (directory_type != G_FILE_TYPE_DIRECTORY)
+    {
+      ide_task_return_new_error (task,
+                                 G_IO_ERROR,
+                                 G_IO_ERROR_NOT_DIRECTORY,
+                                 "Not a directory: %s",
+                                 directory_path);
+      g_free (directory_path);
+      return;
+    }
+
+  // Initialize data.
+  gbmp_python_venv_venv_data_new_async (directory_path,
+                                        cancel,
+                                        gbmp_python_venv_application_addin_add_python_venv_data_new,
+                                        task);
+  g_free (directory_path);
+}
+
+static void
+gbmp_python_venv_application_addin_add_python_venv_data_new (GObject      *source,
+                                                             GAsyncResult *result,
+                                                             gpointer      user_data)
+{
+  IdeTask *task = NULL;
+  GbmpPythonVenvApplicationAddin *addin = NULL;
+  GbmpPythonVenvVenvData *data = NULL;
+  const gchar *data_path = NULL;
+
+  GError *error = NULL;
+
+  task = IDE_TASK (user_data);
+  data = gbmp_python_venv_venv_data_new_finish (source, result, &error);
+  if (error != NULL)
+    {
+      ide_task_return_error(task, error);
+      return;
+    }
+
+  // Add data list
+
+  data_path = gbmp_python_venv_venv_data_get_path (data);
+  addin = GBMP_PYTHON_VENV_APPLICATION_ADDIN (ide_task_get_source_object (task));
+  g_hash_table_insert (addin->table_path_data, g_strdup (data_path), data);
+
+  // Gather the result and set it back to settings.
+  _update_settings (addin);
+
+  // Emit notify and python-venv-added
+  g_signal_emit (addin, sig_python_venv_added, 0, data);
+  g_object_notify_by_pspec (G_OBJECT(addin), props[PROP_PYTHON_VENV_DATAS]);
+
+
+  ide_task_return_boolean (task, TRUE);
+}
+
+gboolean
+gbmp_python_venv_application_addin_add_python_venv_finish (GbmpPythonVenvApplicationAddin  *addin,
+                                                           GAsyncResult                    *result,
+                                                           GError                         **error)
+{
+  IdeTask *task = NULL;
+
+  task = IDE_TASK (result);
+
+  return ide_task_propagate_boolean (task, error);
+}
+
+void
+gbmp_python_venv_application_addin_make_python_venv_async (GbmpPythonVenvApplicationAddin *addin,
+                                                           GFile                          *directory,
+                                                           GCancellable                   *cancel,
+                                                           GAsyncReadyCallback             callback,
+                                                           gpointer                        user_data)
+{
+  IdeTask *task = NULL;
+  gchar *directory_path = NULL;
+  gboolean directory_exists = FALSE;
+  GFileType directory_type = G_FILE_TYPE_UNKNOWN;
+
+  task = ide_task_new (addin, cancel, callback, user_data);
+  if (ide_task_return_error_if_cancelled (task))
+    {
+      return;
+    }
+
+  // Check directory and get path.
+  directory_path = g_file_get_path (directory);
+  directory_exists = g_file_query_exists (directory, cancel);
+  if (! directory_exists)
+    {
+      // Try to make directory.
+      g_file_make_directory_async (directory,
+                                   G_PRIORITY_DEFAULT,
+                                   cancel,
+                                   gbmp_python_venv_application_addin_make_python_venv_mkdir,
+                                   task);
+      g_free (directory_path);
+      return;
+    }
+
+  directory_type = g_file_query_file_type (directory,
+                                           G_FILE_QUERY_INFO_NONE,
+                                           cancel);
+  if (directory_type != G_FILE_TYPE_DIRECTORY)
+    {
+      ide_task_return_new_error (task,
+                                 G_IO_ERROR,
+                                 G_IO_ERROR_NOT_DIRECTORY,
+                                 "Not a directory: %s",
+                                 directory_path);
+      g_free (directory_path);
+      return;
+    }
+
+  gbmp_python_venv_application_addin_make_python_venv_setup (addin, directory_path, task);
+}
+
+
+static void
+gbmp_python_venv_application_addin_make_python_venv_mkdir (GObject      *source,
+                                                           GAsyncResult *result,
+                                                           gpointer      user_data)
+{
+  GFile *file = NULL;
+  IdeTask *task = NULL;
+  GbmpPythonVenvApplicationAddin *addin = NULL;
+  gchar *directory_path = NULL;
+
+  GError *error = NULL;
+
+  file = G_FILE (source);
+  task = IDE_TASK (user_data);
+
+  g_file_make_directory_finish (file, result, &error);
+  if (error != NULL)
+    {
+      ide_task_return_error (task, error);
+      return;
+    }
+
+  directory_path = g_file_get_path (file);
+  gbmp_python_venv_application_addin_make_python_venv_setup (addin, directory_path, task);
+}
+
+static void
+gbmp_python_venv_application_addin_make_python_venv_setup (GbmpPythonVenvApplicationAddin *addin,
+                                                           gchar                          *path,
+                                                           IdeTask                        *task)
+{
+  GCancellable *cancel = NULL;
+  IdeSubprocessLauncher *launcher = NULL;
+  IdeSubprocess *subprocess = NULL;
+  ClosureSetupDone *closure = NULL;
+  GError *error = NULL;
+
+  cancel = ide_task_get_cancellable (task);
+
+  launcher = ide_subprocess_launcher_new (G_SUBPROCESS_FLAGS_NONE);
+  ide_subprocess_launcher_set_run_on_host (launcher, TRUE);
+
+  // Explicit use python 3 - some system may use python 2 as `python`
+
+  ide_subprocess_launcher_push_argv(launcher, "python3");
+  ide_subprocess_launcher_push_argv(launcher, "-m");
+  ide_subprocess_launcher_push_argv(launcher, "venv");
+  ide_subprocess_launcher_push_argv(launcher, path);
+  subprocess = ide_subprocess_launcher_spawn(launcher, cancel, &error);
+  g_object_unref (launcher);
+
+  closure = g_new (ClosureSetupDone, 1);
+  closure->task = task;
+  closure->path = path;
+  ide_subprocess_wait_check_async (subprocess,
+                                   cancel,
+                                   gbmp_python_venv_application_addin_make_python_venv_setup_done,
+                                   closure);
+  g_object_unref (subprocess);
+}
+
+static void
+gbmp_python_venv_application_addin_make_python_venv_setup_done (GObject      *source,
+                                                                GAsyncResult *result,
+                                                                gpointer      user_data)
+{
+  IdeSubprocess *subprocess = NULL;
+  ClosureSetupDone *closure = (ClosureSetupDone *)user_data;
+  GError *error = NULL;
+
+  subprocess = IDE_SUBPROCESS (source);
+
+  ide_subprocess_wait_check_finish (subprocess, result, &error);
+  if (error != NULL)
+    {
+      ide_task_return_error (closure->task, error);
+      return;
+    }
+
+  gbmp_python_venv_venv_data_new_async (closure->path,
+                                        ide_task_get_cancellable (closure->task),
+                                        gbmp_python_venv_application_addin_make_python_venv_data_new,
+                                        closure->task);
+  g_free (closure->path);
+  g_free (closure);
+}
+
+
+static void
+gbmp_python_venv_application_addin_make_python_venv_data_new (GObject      *source,
+                                                              GAsyncResult *result,
+                                                              gpointer      user_data)
+{
+  IdeTask *task = NULL;
+  GbmpPythonVenvApplicationAddin *addin = NULL;
+  GbmpPythonVenvVenvData *data = NULL;
+  const gchar *data_path = NULL;
+  GError *error = NULL;
+
+  task = IDE_TASK (user_data);
+
+  data = gbmp_python_venv_venv_data_new_finish (source, result, &error);
+  if (error != NULL)
+    {
+      ide_task_return_error (task, error);
+      return;
+    }
+
+  // Add data list
+
+  data_path = gbmp_python_venv_venv_data_get_path (data);
+  addin = GBMP_PYTHON_VENV_APPLICATION_ADDIN (ide_task_get_source_object (task));
+  g_hash_table_insert (addin->table_path_data, g_strdup (data_path), data);
+
+  // Gather the result and set it back to settings.
+  _update_settings (addin);
+
+  // Emit notify and python-venv-added
+  g_signal_emit (addin, sig_python_venv_added, 0, data);
+  g_object_notify_by_pspec (G_OBJECT(addin), props[PROP_PYTHON_VENV_DATAS]);
+
+
+  ide_task_return_boolean (task, TRUE);
+}
+
+
+gboolean
+gbmp_python_venv_application_addin_make_python_venv_finish (GbmpPythonVenvApplicationAddin  *addin,
+                                                            GAsyncResult                    *result,
+                                                            GError                         **error)
+{
+  IdeTask *task = NULL;
+
+  task = IDE_TASK (result);
+
+  return ide_task_propagate_boolean (task, error);
 }
 
 /////// GTypeInstance
@@ -121,6 +476,15 @@ gbmp_python_venv_application_addin_class_init (GbmpPythonVenvApplicationAddinCla
   // GObject
 
   c_g_object->finalize = _g_object_finalize;
+  c_g_object->get_property = _g_object_get_property;
+  c_g_object->set_property = _g_object_set_property;
+
+  props[PROP_PYTHON_VENV_DATAS] = g_param_spec_boxed ("python-venv-datas",
+                                                      "Python Venv Data List",
+                                                      "Python Venv Data List",
+                                                      G_TYPE_PTR_ARRAY,
+                                                      G_PARAM_STATIC_STRINGS |
+                                                      G_PARAM_READABLE);
 }
 
 static void
@@ -159,6 +523,38 @@ _g_object_finalize (GObject *object)
   g_clear_pointer (&addin->table_path_data, g_hash_table_unref);
 
   parent_class->finalize(object);
+}
+
+static void
+_g_object_get_property (GObject    *object,
+                        guint       prop_id,
+                        GValue     *value,
+                        GParamSpec *pspec)
+{
+  GbmpPythonVenvApplicationAddin *addin = NULL;
+
+  addin = GBMP_PYTHON_VENV_APPLICATION_ADDIN (addin);
+
+  switch (prop_id)
+    {
+    case PROP_PYTHON_VENV_DATAS:
+      g_value_take_boxed (value,
+                          g_hash_table_get_values_as_ptr_array (addin->table_path_data));
+      break;
+
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      return;
+    }
+}
+
+static void
+_g_object_set_property (GObject      *object,
+                        guint         prop_id,
+                        const GValue *value,
+                        GParamSpec   *pspec)
+{
+  G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
 }
 
 
@@ -353,10 +749,21 @@ _setup_python_venvs_data_new (GObject      *source,
 static void
 _setup_python_venvs_data_new_then (ClosureVenvsDataNew *closure)
 {
+  _update_settings (closure->addin);
+  g_object_notify_by_pspec (G_OBJECT(closure->addin),
+                            G_PARAM_SPEC (props[PROP_PYTHON_VENV_DATAS]));
+
+  g_object_unref (closure->addin);
+  g_free (closure);
+}
+
+static void
+_update_settings (GbmpPythonVenvApplicationAddin *addin)
+{
   GPtrArray *paths = NULL;
   // Gather the result and set it back to settings.
 
-  paths = g_hash_table_get_keys_as_ptr_array (closure->addin->table_path_data);
+  paths = g_hash_table_get_keys_as_ptr_array (addin->table_path_data);
   g_ptr_array_sort (paths, (GCompareFunc) strcmp);
 
   if (! g_ptr_array_is_null_terminated (paths))
@@ -364,17 +771,14 @@ _setup_python_venvs_data_new_then (ClosureVenvsDataNew *closure)
       g_ptr_array_add (paths, NULL);
     }
 
-  closure->addin->python_venvs_is_setting = TRUE;
+  addin->python_venvs_is_setting = TRUE;
 
-  g_settings_set_strv (closure->addin->settings,
+  g_settings_set_strv (addin->settings,
                        "python-venvs",
                        (const gchar * const *) paths->pdata);
 
-  closure->addin->python_venvs_is_setting = FALSE;
-
+  addin->python_venvs_is_setting = FALSE;
   g_ptr_array_unref (paths);
-  g_object_unref (closure->addin);
-  g_free (closure);
 }
 
 

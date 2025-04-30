@@ -2,14 +2,16 @@
 
 #include <adwaita.h>
 
+#include "gbmp-python-venv-application-addin.h"
+#include "gbmp-python-venv-data.h"
 #include "gbmp-python-venv-tweaks-addin.h"
 
 struct _GbmpPythonVenvTweaksAddin
 {
   IdeTweaksAddin parent_instance;
 
-  GSettings     *settings;
-  GtkStringList *venv_list;
+  GbmpPythonVenvApplicationAddin *addin;
+  GListStore *python_venv_store;
   GtkFileDialog *folder_file_dialog;
 };
 
@@ -21,11 +23,11 @@ G_DEFINE_FINAL_TYPE (GbmpPythonVenvTweaksAddin,
 static void g_object_dispose (GObject *self);
 
 //////// Private Functions
-//// Settings Callbacks
+//// Addin Callbacks
 static void
-settings_python_venvs_changed(GSettings   *settings,
-                              const gchar *key,
-                              gpointer     user_data);
+addin_python_venvs_notify(GObject    *object,
+                          GParamSpec *pspec,
+                          gpointer    user_data);
 //// UI Callbacks
 
 static GtkWidget *
@@ -52,6 +54,11 @@ add_button_clicked_folder_file_dialog_select_folder_done (GObject      *source,
 static void
 make_button_clicked (GtkButton *self, gpointer user_data);
 
+static void
+make_button_clicked_folder_file_dialog_select_folder_done (GObject      *source,
+                                                           GAsyncResult *result,
+                                                           gpointer      user_data);
+
 //////// GTypeInstance
 
 static void
@@ -66,7 +73,7 @@ gbmp_python_venv_tweaks_addin_class_init (GbmpPythonVenvTweaksAddinClass *c)
 static void
 gbmp_python_venv_tweaks_addin_init (GbmpPythonVenvTweaksAddin *self)
 {
-  gchar **python_venvs = NULL;
+  GPtrArray *python_venv_array = NULL;
 
   ide_tweaks_addin_set_resource_paths (IDE_TWEAKS_ADDIN (self),
                                        IDE_STRV_INIT ("/plugins/python-venv/tweaks.ui"));
@@ -77,18 +84,19 @@ gbmp_python_venv_tweaks_addin_init (GbmpPythonVenvTweaksAddin *self)
   ide_tweaks_addin_bind_callback (IDE_TWEAKS_ADDIN (self),
                                   add_item_create_for_item);
 
-  self->settings = g_settings_new("org.gnome.builder.PythonVenv");
-  python_venvs = g_settings_get_strv(self->settings, "python-venvs");
+  self->addin = g_object_ref (gbmp_python_venv_application_addin_get_instance ());
 
-  self->venv_list = gtk_string_list_new((const gchar * const *)python_venvs);
-  g_signal_connect (self->settings,
-                    "changed::python-venvs",
-                    G_CALLBACK(settings_python_venvs_changed),
-                    self->venv_list);
+  python_venv_array = gbmp_python_venv_application_addin_get_venv_datas (self->addin);
+  self->python_venv_store = g_list_store_new (GBMP_TYPE_PYTHON_VENV_VENV_DATA);
+  g_list_store_splice (self->python_venv_store, 0, 0, python_venv_array->pdata, python_venv_array->len);
+  g_ptr_array_unref (python_venv_array);
+
+  g_signal_connect (self->addin,
+                    "notify::python-venv-datas",
+                    G_CALLBACK(addin_python_venvs_notify),
+                    self->python_venv_store);
 
   self->folder_file_dialog = gtk_file_dialog_new ();
-
-  g_strfreev(python_venvs);
 }
 
 //////// GObject
@@ -103,8 +111,8 @@ g_object_dispose (GObject *self)
   addin_self = GBMP_PYTHON_VENV_TWEAKS_ADDIN (self);
 
   g_clear_object (&addin_self->folder_file_dialog);
-  g_clear_object (&addin_self->venv_list);
-  g_clear_object (&addin_self->settings);
+  g_clear_object (&addin_self->python_venv_store);
+  g_clear_object (&addin_self->addin);
   parent_class->dispose (self);
 }
 
@@ -112,22 +120,25 @@ g_object_dispose (GObject *self)
 
 //// Settings Callbacks
 static void
-settings_python_venvs_changed(GSettings   *settings,
-                              const gchar *key,
-                              gpointer     user_data)
+addin_python_venvs_notify(GObject    *object,
+                          GParamSpec *pspec,
+                          gpointer    user_data)
 {
-  GtkStringList *venv_list = NULL;
-  guint          venv_len = 0;
-  gchar        **strv = NULL;
+  GbmpPythonVenvApplicationAddin *addin = NULL;
+  GListStore *python_venv_store = NULL;
+  guint       python_venv_len = 0;
 
-  venv_list = GTK_STRING_LIST (user_data);
-  venv_len = g_list_model_get_n_items(G_LIST_MODEL(venv_list));
+  GPtrArray *python_venv_array = NULL;
 
-  strv = g_settings_get_strv (settings, key);
+  addin = GBMP_PYTHON_VENV_APPLICATION_ADDIN(object);
 
-  gtk_string_list_splice (venv_list, 0, venv_len, (const gchar* const*)strv);
+  python_venv_store = G_LIST_STORE(user_data);
+  python_venv_len = g_list_model_get_n_items (G_LIST_MODEL (python_venv_store));
 
-  g_strfreev(strv);
+  python_venv_array = gbmp_python_venv_application_addin_get_venv_datas (addin);
+
+  g_list_store_splice (python_venv_store, 0, python_venv_len, python_venv_array->pdata, python_venv_array->len);
+  g_ptr_array_unref (python_venv_array);
 }
 
 //// UI Callbacks
@@ -158,7 +169,7 @@ list_item_create_for_item (IdeTweaksWidget *self,
   addin = GBMP_PYTHON_VENV_TWEAKS_ADDIN (user_data);
 
   gtk_list_box_bind_model (content,
-                           G_LIST_MODEL(addin->venv_list),
+                           G_LIST_MODEL(addin->python_venv_store),
                            list_create_row,
                            addin,
                            NULL);
@@ -170,26 +181,24 @@ static GtkWidget *
 list_create_row (gpointer item, gpointer user_data)
 {
   GbmpPythonVenvTweaksAddin *addin = NULL;
-  GtkStringObject *stro = NULL;
-  const gchar *str = NULL;
-  gchar *base_name = NULL;
-  gchar *dir_name = NULL;
+  GbmpPythonVenvVenvData *data = NULL;
+
+  // For now we treat python venv only.
+  const gchar *prompt = NULL;
+  const gchar *path = NULL;
+
   AdwActionRow *row = NULL;
 
   addin = GBMP_PYTHON_VENV_TWEAKS_ADDIN (user_data);
-  stro = GTK_STRING_OBJECT (item);
-  str = gtk_string_object_get_string (stro);
+  data = GBMP_PYTHON_VENV_VENV_DATA (item);
 
-  base_name = g_path_get_basename (str);
-  dir_name = g_path_get_dirname (str);
+  prompt = gbmp_python_venv_venv_data_get_prompt (data);
+  path = gbmp_python_venv_venv_data_get_path (data);
 
   row = ADW_ACTION_ROW (adw_action_row_new());
-  adw_preferences_row_set_title (ADW_PREFERENCES_ROW (row), base_name);
+  adw_preferences_row_set_title (ADW_PREFERENCES_ROW (row), prompt);
   adw_preferences_row_set_title_selectable (ADW_PREFERENCES_ROW (row), FALSE);
-  adw_action_row_set_subtitle (row, dir_name);
-
-  g_clear_pointer (&base_name, g_free);
-  g_clear_pointer (&dir_name, g_free);
+  adw_action_row_set_subtitle (row, path);
 
   return GTK_WIDGET(row);
 }
@@ -253,11 +262,7 @@ add_button_clicked_folder_file_dialog_select_folder_done (GObject      *source,
   GbmpPythonVenvTweaksAddin *addin = NULL;
   GtkFileDialog             *file_dialog = NULL;
   GFile                     *selected = NULL;
-  gchar                     *selected_str = NULL;
-  gchar                   **settings_list = NULL;
-  GStrvBuilder             *settings_list_builder = NULL;
-
-  GError                   *error = NULL;
+  GError                    *error = NULL;
 
   addin = GBMP_PYTHON_VENV_TWEAKS_ADDIN (user_data);
   file_dialog = GTK_FILE_DIALOG (source);
@@ -267,22 +272,12 @@ add_button_clicked_folder_file_dialog_select_folder_done (GObject      *source,
     g_debug ("add_butotn_clicked_folder_file_dialog_select_folder_done: %s", error->message);
     return;
   }
-  // TODO: Check selected is python virtual environment.
 
-  selected_str = g_file_get_path(selected);
-
-  settings_list = g_settings_get_strv (addin->settings, "python-venvs");
-  settings_list_builder = g_strv_builder_new ();
-
-  g_strv_builder_addv (settings_list_builder, (const gchar **)settings_list);
-  g_strfreev (settings_list);
-
-  g_strv_builder_add (settings_list_builder, selected_str);
-  g_free (selected_str);
-
-  settings_list = g_strv_builder_unref_to_strv (settings_list_builder);
-  g_settings_set_strv (addin->settings, "python-venvs", (const gchar * const *) settings_list);
-  g_strfreev(settings_list);
+  gbmp_python_venv_application_addin_add_python_venv_async (addin->addin,
+                                                            selected,
+                                                            NULL,
+                                                            NULL,
+                                                            NULL);
 }
 
 
@@ -296,7 +291,32 @@ make_button_clicked (GtkButton *self, gpointer user_data)
   gtk_file_dialog_select_folder (addin->folder_file_dialog,
                                  NULL /* GtkWindow parent */,
                                  NULL /* GCancellable cancellable*/,
-                                 NULL /* GAsyncReadyCallback callback*/,
-                                 NULL /* userdata of callback */);
+                                 make_button_clicked_folder_file_dialog_select_folder_done,
+                                 addin);
 }
 
+static void
+make_button_clicked_folder_file_dialog_select_folder_done (GObject      *source,
+                                                           GAsyncResult *result,
+                                                           gpointer      user_data)
+{
+  GbmpPythonVenvTweaksAddin *addin = NULL;
+  GtkFileDialog             *file_dialog = NULL;
+  GFile                     *selected = NULL;
+  GError                    *error = NULL;
+
+  addin = GBMP_PYTHON_VENV_TWEAKS_ADDIN (user_data);
+  file_dialog = GTK_FILE_DIALOG (source);
+  selected = gtk_file_dialog_select_folder_finish (file_dialog, result, &error);
+
+  if (error != NULL) {
+    g_debug ("make_butotn_clicked_folder_file_dialog_select_folder_done: %s", error->message);
+    return;
+  }
+
+  gbmp_python_venv_application_addin_make_python_venv_async (addin->addin,
+                                                            selected,
+                                                            NULL,
+                                                            NULL,
+                                                            NULL);
+}
