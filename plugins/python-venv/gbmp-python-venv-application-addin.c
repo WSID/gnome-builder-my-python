@@ -1,7 +1,5 @@
 #include "gbmp-python-venv-application-addin.h"
 
-#include "gbmp-python-venv-data.h"
-
 #undef G_LOG_DOMAIN
 #define G_LOG_DOMAIN "gbmp-python-venv-application-addin"
 
@@ -40,6 +38,17 @@ gbmp_python_venv_application_addin_make_python_venv_data_new (GObject      *sour
                                                               GAsyncResult *result,
                                                               gpointer      user_data);
 
+typedef struct
+{
+  IdeTask *task;
+  GbmpPythonVenvVenvData *data;
+}
+ClosureReap;
+
+static void
+gbmp_python_venv_application_addin_purge_python_venv_reap (GObject      *source,
+                                                           GAsyncResult *result,
+                                                           gpointer      user_data);
 //////// GTypeInstance
 
 struct _GbmpPythonVenvApplicationAddin
@@ -434,6 +443,128 @@ gbmp_python_venv_application_addin_make_python_venv_finish (GbmpPythonVenvApplic
   return ide_task_propagate_boolean (task, error);
 }
 
+
+
+void
+gbmp_python_venv_application_addin_remove_python_venv (GbmpPythonVenvApplicationAddin *addin,
+                                                       GbmpPythonVenvVenvData         *data)
+{
+  // Remove virtual environment - Just forget about it.
+  const gchar *data_path = NULL;
+  GbmpPythonVenvVenvData *data_actual = NULL;
+
+  data_path = gbmp_python_venv_venv_data_get_path (data);
+
+  data_actual = g_hash_table_lookup (addin->table_path_data, data_path);
+
+  if (data != data_actual)
+    {
+      g_warning ("Requested data and actual data is different.");
+      return;
+    }
+
+  g_hash_table_remove (addin->table_path_data, data_path);
+  _update_settings (addin);
+  g_object_notify_by_pspec (G_OBJECT(addin), props[PROP_PYTHON_VENV_DATAS]);
+}
+
+void
+gbmp_python_venv_application_addin_purge_python_venv_async (GbmpPythonVenvApplicationAddin *addin,
+                                                            GbmpPythonVenvVenvData         *data,
+                                                            GCancellable                   *cancellable,
+                                                            GAsyncReadyCallback             callback,
+                                                            gpointer                        user_data)
+{
+  // Purge virutal environment - Delete its directory as well.
+  IdeTask *task = NULL;
+
+  const gchar *data_path = NULL;
+  GbmpPythonVenvVenvData *data_actual = NULL;
+  IdeDirectoryReaper *reaper = NULL;
+  GFile *file = NULL;
+  ClosureReap *closure = NULL;
+
+  task = ide_task_new (addin, cancellable, callback, user_data);
+
+  data_path = gbmp_python_venv_venv_data_get_path (data);
+
+  data_actual = g_hash_table_lookup (addin->table_path_data, data_path);
+
+  if (data != data_actual)
+    {
+      ide_task_return_new_error (task,
+                                 G_IO_ERROR,
+                                 G_IO_ERROR_UNKNOWN,
+                                 "Requested data and actual data is different.");
+      return;
+    }
+
+  reaper = ide_directory_reaper_new ();
+  file = g_file_new_for_path (data_path);
+
+  ide_directory_reaper_add_directory (reaper, file, 0);
+  ide_directory_reaper_add_file (reaper, file, 0);
+
+  closure = g_new(ClosureReap, 1);
+  closure->task = task;
+  closure->data = data;
+
+  ide_directory_reaper_execute_async (reaper,
+                                      cancellable,
+                                      gbmp_python_venv_application_addin_purge_python_venv_reap,
+                                      closure);
+
+  g_object_unref (file);
+  g_object_unref (reaper);
+}
+
+static void
+gbmp_python_venv_application_addin_purge_python_venv_reap (GObject      *source,
+                                                           GAsyncResult *result,
+                                                           gpointer      user_data)
+{
+  IdeDirectoryReaper *reaper = NULL;
+  ClosureReap *closure = NULL;
+  GbmpPythonVenvApplicationAddin *addin = NULL;
+  const gchar *path = NULL;
+
+  GError *error = NULL;
+
+  reaper = IDE_DIRECTORY_REAPER (source);
+  closure = (ClosureReap *)user_data;
+  addin = GBMP_PYTHON_VENV_APPLICATION_ADDIN (ide_task_get_source_object (closure->task));
+  path = gbmp_python_venv_venv_data_get_path (closure->data);
+
+  ide_directory_reaper_execute_finish (reaper, result, &error);
+  if (error != NULL)
+    {
+      ide_task_return_error (closure->task, error);
+      g_free (closure);
+      return;
+    }
+
+  g_hash_table_remove (addin->table_path_data, path);
+  _update_settings (addin);
+  g_object_notify_by_pspec (G_OBJECT(addin), props[PROP_PYTHON_VENV_DATAS]);
+
+  ide_task_return_boolean (closure->task, true);
+  g_free (closure);
+}
+
+
+gboolean
+gbmp_python_venv_application_addin_purge_python_venv_finish (GbmpPythonVenvApplicationAddin  *addin,
+                                                             GAsyncResult                    *result,
+                                                             GError                         **error)
+{
+  IdeTask *task = NULL;
+
+  task = IDE_TASK(result);
+
+  return ide_task_propagate_boolean (task, error);
+}
+
+
 /////// GTypeInstance
 
 G_DEFINE_FINAL_TYPE_WITH_CODE (GbmpPythonVenvApplicationAddin,
@@ -780,5 +911,11 @@ _update_settings (GbmpPythonVenvApplicationAddin *addin)
   addin->python_venvs_is_setting = FALSE;
   g_ptr_array_unref (paths);
 }
+
+
+
+
+
+
 
 

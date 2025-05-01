@@ -2,6 +2,8 @@
 
 #include <libide-gui.h>
 
+#include "gbmp-python-venv-data.h"
+
 G_BEGIN_DECLS
 
 #define GBMP_TYPE_PYTHON_VENV_APPLICATION_ADDIN (gbmp_python_venv_application_addin_get_type())
@@ -40,5 +42,21 @@ gboolean
 gbmp_python_venv_application_addin_make_python_venv_finish (GbmpPythonVenvApplicationAddin  *addin,
                                                             GAsyncResult                    *result,
                                                             GError                         **error);
+
+void
+gbmp_python_venv_application_addin_remove_python_venv (GbmpPythonVenvApplicationAddin *addin,
+                                                       GbmpPythonVenvVenvData         *data);
+
+void
+gbmp_python_venv_application_addin_purge_python_venv_async (GbmpPythonVenvApplicationAddin *addin,
+                                                            GbmpPythonVenvVenvData         *data,
+                                                            GCancellable                   *cancellable,
+                                                            GAsyncReadyCallback             callback,
+                                                            gpointer                        user_data);
+
+gboolean
+gbmp_python_venv_application_addin_purge_python_venv_finish (GbmpPythonVenvApplicationAddin  *addin,
+                                                             GAsyncResult                    *result,
+                                                             GError                         **error);
 
 G_END_DECLS
