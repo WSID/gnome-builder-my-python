@@ -15,34 +15,8 @@
       bind-flags="sync-create"/>
 
     <child type="suffix">
-      <object class="GtkButton">
-        <property name="action-name">item.remove-python-venv</property>
-        <property
-          name="action-target"
-          bind-source="GbmpPythonVenvVenvData"
-          bind-property="path"
-          bind-flags="sync-create"/>
-        <child>
-          <object class="GtkLabel">
-            <property name="label">Remove</property>
-          </object>
-        </child>
-      </object>
-    </child>
-
-    <child type="suffix">
-      <object class="GtkButton">
-        <property name="action-name">item.purge-python-venv</property>
-        <property
-          name="action-target"
-          bind-source="GbmpPythonVenvVenvData"
-          bind-property="path"
-          bind-flags="sync-create"/>
-        <child>
-          <object class="GtkLabel">
-            <property name="label">Purge</property>
-          </object>
-        </child>
+      <object class="GtkMenuButton">
+        <property name="menu-model">menu</property>
       </object>
     </child>
   </object>

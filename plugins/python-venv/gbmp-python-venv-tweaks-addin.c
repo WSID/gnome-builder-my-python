@@ -272,6 +272,11 @@ list_create_row (gpointer item, gpointer user_data)
   GbmpPythonVenvTweaksAddin *addin = NULL;
   GbmpPythonVenvVenvData *data = NULL;
 
+  const gchar *path = NULL;
+  GMenu *menu = NULL;
+  GMenuItem *menu_item_remove = NULL;
+  GMenuItem *menu_item_purge = NULL;
+
   GtkBuilder *builder = NULL;
   AdwActionRow *row = NULL;
 
@@ -280,19 +285,29 @@ list_create_row (gpointer item, gpointer user_data)
   addin = GBMP_PYTHON_VENV_TWEAKS_ADDIN (user_data);
   data = GBMP_PYTHON_VENV_VENV_DATA (item);
 
+  path = gbmp_python_venv_venv_data_get_path (data);
+
+  menu = g_menu_new ();
+  menu_item_remove = g_menu_item_new("Remove", NULL);
+  g_menu_item_set_action_and_target (menu_item_remove, "item.remove-python-venv", "s", path);
+  menu_item_purge = g_menu_item_new("Purge", NULL);
+  g_menu_item_set_action_and_target (menu_item_purge, "item.purge-python-venv", "s", path);
+  g_menu_append_item (menu, menu_item_remove);
+  g_menu_append_item (menu, menu_item_purge);
+
   builder = gtk_builder_new ();
   gtk_builder_expose_object (builder, "GbmpPythonVenvTweaksAddin", G_OBJECT(addin));
   gtk_builder_expose_object (builder, "GbmpPythonVenvVenvData", G_OBJECT(data));
+  gtk_builder_expose_object (builder, "menu", G_OBJECT(menu));
   gtk_builder_add_from_resource (builder, "/plugins/python-venv/tweaks_list_row.ui", &error);
 
   if (error != NULL)
     {
-      ide_object_warning (IDE_OBJECT(addin), "Gtk Builder Error for row: %s", error->message);
+      g_warning ("Gtk Builder Error for row: %s", error->message);
       g_error_free (error);
     }
 
   row = ADW_ACTION_ROW (g_object_ref (gtk_builder_get_object (builder, "row")));
-
   g_object_unref (builder);
   return GTK_WIDGET(row);
 }
