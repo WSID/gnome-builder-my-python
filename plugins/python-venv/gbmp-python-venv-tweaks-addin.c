@@ -272,37 +272,28 @@ list_create_row (gpointer item, gpointer user_data)
   GbmpPythonVenvTweaksAddin *addin = NULL;
   GbmpPythonVenvVenvData *data = NULL;
 
-  // For now we treat python venv only.
-  const gchar *prompt = NULL;
-  const gchar *path = NULL;
-
+  GtkBuilder *builder = NULL;
   AdwActionRow *row = NULL;
-  GtkWidget *btn_remove = NULL;
-  GtkWidget *btn_purge = NULL;
+
+  GError *error = NULL;
 
   addin = GBMP_PYTHON_VENV_TWEAKS_ADDIN (user_data);
   data = GBMP_PYTHON_VENV_VENV_DATA (item);
 
-  prompt = gbmp_python_venv_venv_data_get_prompt (data);
-  path = gbmp_python_venv_venv_data_get_path (data);
+  builder = gtk_builder_new ();
+  gtk_builder_expose_object (builder, "GbmpPythonVenvTweaksAddin", G_OBJECT(addin));
+  gtk_builder_expose_object (builder, "GbmpPythonVenvVenvData", G_OBJECT(data));
+  gtk_builder_add_from_resource (builder, "/plugins/python-venv/tweaks_list_row.ui", &error);
 
-  row = ADW_ACTION_ROW (adw_action_row_new());
-  adw_preferences_row_set_title (ADW_PREFERENCES_ROW (row), prompt);
-  adw_preferences_row_set_title_selectable (ADW_PREFERENCES_ROW (row), FALSE);
-  adw_action_row_set_subtitle (row, path);
+  if (error != NULL)
+    {
+      ide_object_warning (IDE_OBJECT(addin), "Gtk Builder Error for row: %s", error->message);
+      g_error_free (error);
+    }
 
-  btn_remove = gtk_button_new_with_label ("Remove");
-  gtk_widget_set_vexpand (GTK_WIDGET(btn_remove), FALSE);
-  gtk_actionable_set_action_name (GTK_ACTIONABLE(btn_remove), "item.remove-python-venv");
-  gtk_actionable_set_action_target (GTK_ACTIONABLE(btn_remove), "s", path);
-  adw_action_row_add_suffix (row, btn_remove);
+  row = ADW_ACTION_ROW (g_object_ref (gtk_builder_get_object (builder, "row")));
 
-  btn_purge = gtk_button_new_with_label ("Purge");
-  gtk_widget_set_vexpand (GTK_WIDGET(btn_purge), FALSE);
-  gtk_actionable_set_action_name (GTK_ACTIONABLE(btn_purge), "item.purge-python-venv");
-  gtk_actionable_set_action_target (GTK_ACTIONABLE(btn_purge), "s", path);
-  adw_action_row_add_suffix (row, btn_purge);
-
+  g_object_unref (builder);
   return GTK_WIDGET(row);
 }
 
