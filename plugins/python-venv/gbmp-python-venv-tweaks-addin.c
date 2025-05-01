@@ -91,6 +91,14 @@ make_button_clicked_folder_make_done (GObject      *source,
                                       GAsyncResult *result,
                                       gpointer      user_data);
 
+//// Actions
+
+typedef struct _ClosureChoice
+{
+  GbmpPythonVenvApplicationAddin *app_addin;
+  gchar *path;
+} ClosureChoice;
+
 static GSimpleActionGroup *
 list_action_group (GbmpPythonVenvApplicationAddin *app_addin);
 
@@ -98,10 +106,22 @@ static void
 list_action_remove_activate (GSimpleAction *action,
                              GVariant      *param,
                              gpointer       user_data);
+
+static void
+list_action_remove_activate_chosen (GObject      *source,
+                                    GAsyncResult *result,
+                                    gpointer      user_data);
+
 static void
 list_action_purge_activate (GSimpleAction *action,
                             GVariant      *param,
                             gpointer       user_data);
+
+static void
+list_action_purge_activate_chosen (GObject      *source,
+                                   GAsyncResult *result,
+                                   gpointer      user_data);
+
 static void
 list_action_purge_done (GObject      *source,
                         GAsyncResult *result,
@@ -559,10 +579,66 @@ list_action_remove_activate (GSimpleAction *action,
   GbmpPythonVenvApplicationAddin *app_addin = NULL;
   const gchar *param_str = NULL;
 
+  GtkAlertDialog *dialog = NULL;
+  gchar *detailed_message = NULL;
+
+  ClosureChoice *closure = NULL;
+
   app_addin = GBMP_PYTHON_VENV_APPLICATION_ADDIN (user_data);
   param_str = g_variant_get_string (param, NULL);
 
-  gbmp_python_venv_application_addin_remove_python_venv_path (app_addin, param_str);
+  dialog = gtk_alert_dialog_new ("Remove the virtual environment?");
+
+  detailed_message = g_strdup_printf(
+      "Removing virtual environment.\n"
+      "%s\n"
+      "Removed environment can be added back later.",
+      param_str);
+
+  gtk_alert_dialog_set_detail (dialog, detailed_message);
+  gtk_alert_dialog_set_modal (dialog, TRUE);
+  gtk_alert_dialog_set_buttons (dialog, IDE_STRV_INIT("Confirm", "Cancel"));
+  gtk_alert_dialog_set_default_button (dialog, 0);
+  gtk_alert_dialog_set_cancel_button (dialog, 1);
+
+  g_free (detailed_message);
+
+  closure = g_new (ClosureChoice, 1);
+  closure->app_addin = app_addin;
+  closure->path = g_strdup (param_str);
+
+  gtk_alert_dialog_choose (dialog,
+                           NULL,
+                           NULL,
+                           list_action_remove_activate_chosen,
+                           closure);
+  g_object_unref (dialog);
+}
+
+
+static void
+list_action_remove_activate_chosen (GObject      *source,
+                                    GAsyncResult *result,
+                                    gpointer      user_data)
+{
+  GtkAlertDialog *dialog = NULL;
+  ClosureChoice *closure = NULL;
+  GError *error = NULL;
+  gint choice = 0;
+
+  dialog = GTK_ALERT_DIALOG(source);
+  closure = (ClosureChoice *)user_data;
+
+  choice = gtk_alert_dialog_choose_finish (dialog, result, &error);
+
+  if (choice == 0)
+    {
+      gbmp_python_venv_application_addin_remove_python_venv_path (closure->app_addin,
+                                                                  closure->path);
+    }
+
+  g_free (closure->path);
+  g_free (closure);
 }
 
 static void
@@ -573,16 +649,69 @@ list_action_purge_activate (GSimpleAction *action,
   GbmpPythonVenvApplicationAddin *app_addin = NULL;
   const gchar *param_str = NULL;
 
+  GtkAlertDialog *dialog = NULL;
+  gchar *detailed_message = NULL;
+
+  ClosureChoice *closure = NULL;
+
   app_addin = GBMP_PYTHON_VENV_APPLICATION_ADDIN (user_data);
   param_str = g_variant_get_string (param, NULL);
 
-  gbmp_python_venv_application_addin_purge_python_venv_path_async (app_addin,
-                                                              param_str,
-                                                              NULL,
-                                                              list_action_purge_done,
-                                                              NULL);
+  dialog = gtk_alert_dialog_new ("Purge the virtual environment?");
+
+  detailed_message = g_strdup_printf(
+      "Purging virtual environment.\n"
+      "%s\n"
+      "This will DELETE all content and the directory.",
+      param_str);
+
+  gtk_alert_dialog_set_detail (dialog, detailed_message);
+  gtk_alert_dialog_set_modal (dialog, TRUE);
+  gtk_alert_dialog_set_buttons (dialog, IDE_STRV_INIT("Confirm", "Cancel"));
+  gtk_alert_dialog_set_default_button (dialog, 0);
+  gtk_alert_dialog_set_cancel_button (dialog, 1);
+
+  g_free (detailed_message);
+
+  closure = g_new (ClosureChoice, 1);
+  closure->app_addin = app_addin;
+  closure->path = g_strdup (param_str);
+
+  gtk_alert_dialog_choose (dialog,
+                           NULL,
+                           NULL,
+                           list_action_purge_activate_chosen,
+                           closure);
+  g_object_unref (dialog);
 }
 
+static void
+list_action_purge_activate_chosen (GObject      *source,
+                                   GAsyncResult *result,
+                                   gpointer      user_data)
+{
+  GtkAlertDialog *dialog = NULL;
+  ClosureChoice *closure = NULL;
+  GError *error = NULL;
+  gint choice = 0;
+
+  dialog = GTK_ALERT_DIALOG(source);
+  closure = (ClosureChoice *)user_data;
+
+  choice = gtk_alert_dialog_choose_finish (dialog, result, &error);
+
+  if (choice == 0)
+    {
+      gbmp_python_venv_application_addin_purge_python_venv_path_async (closure->app_addin,
+                                                                       closure->path,
+                                                                       NULL,
+                                                                       list_action_purge_done,
+                                                                       NULL);
+    }
+
+  g_free (closure->path);
+  g_free (closure);
+}
 
 static void
 list_action_purge_done (GObject      *source,
