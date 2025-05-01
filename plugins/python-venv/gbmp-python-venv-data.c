@@ -7,6 +7,16 @@
 #undef G_LOG_DOMAIN
 #define G_LOG_DOMAIN "gbmp-python-venv-data"
 
+////////
+
+static void
+gbmp_python_venv_venv_data_purge_reap (GObject      *source,
+                                       GAsyncResult *result,
+                                       gpointer      user_data);
+
+
+//////// GTypeInstance
+
 struct _GbmpPythonVenvVenvData
 {
   GObject parent_instance;
@@ -102,6 +112,67 @@ const gchar *
 gbmp_python_venv_venv_data_get_prompt (const GbmpPythonVenvVenvData *data)
 {
   return data->prompt;
+}
+
+void
+gbmp_python_venv_venv_data_purge_async (GbmpPythonVenvVenvData *data,
+                                        GCancellable           *cancellable,
+                                        GAsyncReadyCallback     callback,
+                                        gpointer                user_data)
+{
+  IdeTask *task = NULL;
+  IdeDirectoryReaper *reaper = NULL;
+  GFile *file = NULL;
+
+  task = ide_task_new (data, cancellable, callback, user_data);
+
+  reaper = ide_directory_reaper_new ();
+  file = g_file_new_for_path (data->path);
+
+  ide_directory_reaper_add_directory (reaper, file, 0);
+  ide_directory_reaper_add_file (reaper, file, 0);
+
+  ide_directory_reaper_execute_async (reaper,
+                                      cancellable,
+                                      gbmp_python_venv_venv_data_purge_reap,
+                                      task);
+  g_object_unref (reaper);
+  g_object_unref (file);
+}
+
+
+static void
+gbmp_python_venv_venv_data_purge_reap (GObject      *source,
+                                       GAsyncResult *result,
+                                       gpointer      user_data)
+{
+  IdeDirectoryReaper *reaper = NULL;
+  IdeTask *task = NULL;
+  GError *error = NULL;
+
+  reaper = IDE_DIRECTORY_REAPER (source);
+  task = IDE_TASK(user_data);
+
+  ide_directory_reaper_execute_finish (reaper, result, &error);
+  if (error != NULL)
+    {
+      ide_task_return_error (task, error);
+      return;
+    }
+
+  ide_task_return_boolean (task, TRUE);
+}
+
+gboolean
+gbmp_python_venv_venv_data_purge_finish (GbmpPythonVenvVenvData *data,
+                                         GAsyncResult           *result,
+                                         GError                **error)
+{
+  IdeTask *task = NULL;
+
+  task = IDE_TASK(result);
+
+  return ide_task_propagate_boolean (task, error);
 }
 
 

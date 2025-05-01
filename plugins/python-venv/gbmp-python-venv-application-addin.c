@@ -38,17 +38,10 @@ gbmp_python_venv_application_addin_make_python_venv_data_new (GObject      *sour
                                                               GAsyncResult *result,
                                                               gpointer      user_data);
 
-typedef struct
-{
-  IdeTask *task;
-  GbmpPythonVenvVenvData *data;
-}
-ClosureReap;
-
 static void
-gbmp_python_venv_application_addin_purge_python_venv_reap (GObject      *source,
-                                                           GAsyncResult *result,
-                                                           gpointer      user_data);
+gbmp_python_venv_application_addin_purge_python_venv_purge (GObject      *source,
+                                                            GAsyncResult *result,
+                                                            gpointer      user_data);
 //////// GTypeInstance
 
 struct _GbmpPythonVenvApplicationAddin
@@ -480,9 +473,6 @@ gbmp_python_venv_application_addin_purge_python_venv_async (GbmpPythonVenvApplic
 
   const gchar *data_path = NULL;
   GbmpPythonVenvVenvData *data_actual = NULL;
-  IdeDirectoryReaper *reaper = NULL;
-  GFile *file = NULL;
-  ClosureReap *closure = NULL;
 
   task = ide_task_new (addin, cancellable, callback, user_data);
 
@@ -499,47 +489,35 @@ gbmp_python_venv_application_addin_purge_python_venv_async (GbmpPythonVenvApplic
       return;
     }
 
-  reaper = ide_directory_reaper_new ();
-  file = g_file_new_for_path (data_path);
-
-  ide_directory_reaper_add_directory (reaper, file, 0);
-  ide_directory_reaper_add_file (reaper, file, 0);
-
-  closure = g_new(ClosureReap, 1);
-  closure->task = task;
-  closure->data = data;
-
-  ide_directory_reaper_execute_async (reaper,
-                                      cancellable,
-                                      gbmp_python_venv_application_addin_purge_python_venv_reap,
-                                      closure);
-
-  g_object_unref (file);
-  g_object_unref (reaper);
+  gbmp_python_venv_venv_data_purge_async (data,
+                                          cancellable,
+                                          gbmp_python_venv_application_addin_purge_python_venv_purge,
+                                          task);
 }
 
 static void
-gbmp_python_venv_application_addin_purge_python_venv_reap (GObject      *source,
-                                                           GAsyncResult *result,
-                                                           gpointer      user_data)
+gbmp_python_venv_application_addin_purge_python_venv_purge (GObject      *source,
+                                                            GAsyncResult *result,
+                                                            gpointer      user_data)
 {
-  IdeDirectoryReaper *reaper = NULL;
-  ClosureReap *closure = NULL;
+  GbmpPythonVenvVenvData *data = NULL;
+  IdeTask *task = NULL;
   GbmpPythonVenvApplicationAddin *addin = NULL;
+
   const gchar *path = NULL;
 
   GError *error = NULL;
 
-  reaper = IDE_DIRECTORY_REAPER (source);
-  closure = (ClosureReap *)user_data;
-  addin = GBMP_PYTHON_VENV_APPLICATION_ADDIN (ide_task_get_source_object (closure->task));
-  path = gbmp_python_venv_venv_data_get_path (closure->data);
+  data = GBMP_PYTHON_VENV_VENV_DATA (source);
+  task = IDE_TASK(user_data);
+  addin = GBMP_PYTHON_VENV_APPLICATION_ADDIN (ide_task_get_source_object (task));
 
-  ide_directory_reaper_execute_finish (reaper, result, &error);
+  path = gbmp_python_venv_venv_data_get_path (data);
+
+  gbmp_python_venv_venv_data_purge_finish(data, result, &error);
   if (error != NULL)
     {
-      ide_task_return_error (closure->task, error);
-      g_free (closure);
+      ide_task_return_error (task, error);
       return;
     }
 
@@ -547,8 +525,7 @@ gbmp_python_venv_application_addin_purge_python_venv_reap (GObject      *source,
   _update_settings (addin);
   g_object_notify_by_pspec (G_OBJECT(addin), props[PROP_PYTHON_VENV_DATAS]);
 
-  ide_task_return_boolean (closure->task, true);
-  g_free (closure);
+  ide_task_return_boolean (task, TRUE);
 }
 
 
@@ -911,6 +888,7 @@ _update_settings (GbmpPythonVenvApplicationAddin *addin)
   addin->python_venvs_is_setting = FALSE;
   g_ptr_array_unref (paths);
 }
+
 
 
 

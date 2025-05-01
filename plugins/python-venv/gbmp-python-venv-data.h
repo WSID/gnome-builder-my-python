@@ -31,4 +31,16 @@ gbmp_python_venv_venv_data_get_path (const GbmpPythonVenvVenvData *data);
 const gchar *
 gbmp_python_venv_venv_data_get_prompt (const GbmpPythonVenvVenvData *data);
 
+
+void
+gbmp_python_venv_venv_data_purge_async (GbmpPythonVenvVenvData *data,
+                                        GCancellable           *cancellable,
+                                        GAsyncReadyCallback     callback,
+                                        gpointer                user_data);
+
+gboolean
+gbmp_python_venv_venv_data_purge_finish (GbmpPythonVenvVenvData *data,
+                                         GAsyncResult           *result,
+                                         GError                **error);
+
 G_END_DECLS
