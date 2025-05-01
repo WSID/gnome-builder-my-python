@@ -56,24 +56,6 @@ list_item_create_for_item (IdeTweaksWidget *self,
 static GtkWidget *
 list_create_row (gpointer item, gpointer user_data);
 
-typedef struct
-{
-  GbmpPythonVenvApplicationAddin *app_addin;
-  GbmpPythonVenvVenvData *data;
-} ClosureListRow;
-
-static void
-list_row_remove_clicked (GtkButton *button,
-                         gpointer user_data);
-static void
-list_row_purge_clicked (GtkButton *button,
-                        gpointer user_data);
-
-static void
-list_row_purge_done (GObject      *source,
-                     GAsyncResult *result,
-                     gpointer      user_data);
-
 static GtkWidget *
 add_item_create_for_item (IdeTweaksWidget *self,
                           IdeTweaksItem   *item,
@@ -108,6 +90,22 @@ static void
 make_button_clicked_folder_make_done (GObject      *source,
                                       GAsyncResult *result,
                                       gpointer      user_data);
+
+static GSimpleActionGroup *
+list_action_group (GbmpPythonVenvApplicationAddin *app_addin);
+
+static void
+list_action_remove_activate (GSimpleAction *action,
+                             GVariant      *param,
+                             gpointer       user_data);
+static void
+list_action_purge_activate (GSimpleAction *action,
+                            GVariant      *param,
+                            gpointer       user_data);
+static void
+list_action_purge_done (GObject      *source,
+                        GAsyncResult *result,
+                        gpointer      user_data);
 
 //////// GTypeInstance
 
@@ -236,6 +234,7 @@ list_item_create_for_item (IdeTweaksWidget *self,
 
   AdwActionRow              *empty_placeholder = NULL;
   GtkListBox                *content = NULL;
+  GSimpleActionGroup        *action_group = NULL;
 
   empty_placeholder = ADW_ACTION_ROW(adw_action_row_new ());
 
@@ -251,12 +250,18 @@ list_item_create_for_item (IdeTweaksWidget *self,
   gtk_list_box_set_placeholder (content, GTK_WIDGET(empty_placeholder));
 
   addin = GBMP_PYTHON_VENV_TWEAKS_ADDIN (user_data);
+  action_group = list_action_group (addin->addin);
+
+  gtk_widget_insert_action_group (GTK_WIDGET(content),
+                                  "item",
+                                  G_ACTION_GROUP(action_group));
 
   gtk_list_box_bind_model (content,
                            G_LIST_MODEL(addin->python_venv_store),
                            list_create_row,
                            addin,
                            NULL);
+
 
   return GTK_WIDGET(content);
 }
@@ -275,8 +280,6 @@ list_create_row (gpointer item, gpointer user_data)
   GtkWidget *btn_remove = NULL;
   GtkWidget *btn_purge = NULL;
 
-  ClosureListRow *closure = NULL;
-
   addin = GBMP_PYTHON_VENV_TWEAKS_ADDIN (user_data);
   data = GBMP_PYTHON_VENV_VENV_DATA (item);
 
@@ -288,68 +291,20 @@ list_create_row (gpointer item, gpointer user_data)
   adw_preferences_row_set_title_selectable (ADW_PREFERENCES_ROW (row), FALSE);
   adw_action_row_set_subtitle (row, path);
 
-  closure = g_new (ClosureListRow, 1);
-  closure->app_addin = addin->addin;
-  closure->data = data;
-
-  // Attach closure data to UI, to cleared on destroy.
-  g_object_set_data_full (G_OBJECT(row), "list_create_row_closure", closure, g_free);
-
   btn_remove = gtk_button_new_with_label ("Remove");
   gtk_widget_set_vexpand (GTK_WIDGET(btn_remove), FALSE);
-  g_signal_connect (btn_remove, "clicked", G_CALLBACK (list_row_remove_clicked), closure);
+  gtk_actionable_set_action_name (GTK_ACTIONABLE(btn_remove), "item.remove-python-venv");
+  gtk_actionable_set_action_target (GTK_ACTIONABLE(btn_remove), "s", path);
   adw_action_row_add_suffix (row, btn_remove);
 
   btn_purge = gtk_button_new_with_label ("Purge");
   gtk_widget_set_vexpand (GTK_WIDGET(btn_purge), FALSE);
-  g_signal_connect (btn_purge, "clicked", G_CALLBACK (list_row_purge_clicked), closure);
+  gtk_actionable_set_action_name (GTK_ACTIONABLE(btn_purge), "item.purge-python-venv");
+  gtk_actionable_set_action_target (GTK_ACTIONABLE(btn_purge), "s", path);
   adw_action_row_add_suffix (row, btn_purge);
 
   return GTK_WIDGET(row);
 }
-
-static void
-list_row_remove_clicked (GtkButton *button,
-                         gpointer user_data)
-{
-  ClosureListRow *closure = (ClosureListRow *)user_data;
-
-  gbmp_python_venv_application_addin_remove_python_venv (closure->app_addin,
-                                                         closure->data);
-}
-
-static void
-list_row_purge_clicked (GtkButton *button,
-                        gpointer user_data)
-{
-  ClosureListRow *closure = (ClosureListRow *)user_data;
-
-  gbmp_python_venv_application_addin_purge_python_venv_async (closure->app_addin,
-                                                              closure->data,
-                                                              NULL,
-                                                              list_row_purge_done,
-                                                              NULL);
-}
-
-static void
-list_row_purge_done (GObject      *source,
-                     GAsyncResult *result,
-                     gpointer      user_data)
-{
-  GbmpPythonVenvApplicationAddin *app_addin = NULL;
-  GError *error = NULL;
-
-  app_addin = GBMP_PYTHON_VENV_APPLICATION_ADDIN (source);
-
-  gbmp_python_venv_application_addin_purge_python_venv_finish (app_addin, result, &error);
-  if (error != NULL)
-    {
-      g_warning ("list_row_purge_done: %s", error->message);
-      g_error_free (error);
-      return;
-    }
-}
-
 
 static GtkWidget *
 add_item_create_for_item (IdeTweaksWidget *self,
@@ -557,4 +512,89 @@ make_button_clicked_folder_make_done (GObject      *source,
   }
 }
 
+static GSimpleActionGroup *
+list_action_group (GbmpPythonVenvApplicationAddin *app_addin)
+{
+  GSimpleActionGroup *action_group = NULL;
+  GSimpleAction *action_remove = NULL;
+  GSimpleAction *action_purge = NULL;
+
+  action_group = g_simple_action_group_new ();
+
+  action_remove = g_simple_action_new ("remove-python-venv",
+                                       g_variant_type_new ("s"));
+
+  g_signal_connect (action_remove,
+                    "activate",
+                    G_CALLBACK (list_action_remove_activate),
+                    app_addin);
+
+  action_purge = g_simple_action_new ("purge-python-venv",
+                                       g_variant_type_new ("s"));
+
+  g_signal_connect (action_purge,
+                    "activate",
+                    G_CALLBACK (list_action_purge_activate),
+                    app_addin);
+
+  g_action_map_add_action (G_ACTION_MAP(action_group),
+                           G_ACTION(action_remove));
+  g_action_map_add_action (G_ACTION_MAP(action_group),
+                           G_ACTION(action_purge));
+
+  return action_group;
+}
+
+static void
+list_action_remove_activate (GSimpleAction *action,
+                             GVariant      *param,
+                             gpointer       user_data)
+{
+  GbmpPythonVenvApplicationAddin *app_addin = NULL;
+  const gchar *param_str = NULL;
+
+  app_addin = GBMP_PYTHON_VENV_APPLICATION_ADDIN (user_data);
+  param_str = g_variant_get_string (param, NULL);
+
+  gbmp_python_venv_application_addin_remove_python_venv_path (app_addin, param_str);
+}
+
+static void
+list_action_purge_activate (GSimpleAction *action,
+                             GVariant      *param,
+                             gpointer       user_data)
+{
+  GbmpPythonVenvApplicationAddin *app_addin = NULL;
+  const gchar *param_str = NULL;
+
+  app_addin = GBMP_PYTHON_VENV_APPLICATION_ADDIN (user_data);
+  param_str = g_variant_get_string (param, NULL);
+
+  gbmp_python_venv_application_addin_purge_python_venv_path_async (app_addin,
+                                                              param_str,
+                                                              NULL,
+                                                              list_action_purge_done,
+                                                              NULL);
+}
+
+
+static void
+list_action_purge_done (GObject      *source,
+                        GAsyncResult *result,
+                        gpointer      user_data)
+{
+  GbmpPythonVenvApplicationAddin *app_addin = NULL;
+  GError *error = NULL;
+
+  app_addin = GBMP_PYTHON_VENV_APPLICATION_ADDIN (source);
+
+  gbmp_python_venv_application_addin_purge_python_venv_finish (app_addin, result, &error);
+
+  if (error != NULL)
+    {
+      g_warning ("list_row_purge_done: %s", error->message);
+      g_error_free (error);
+      return;
+    }
+}
 

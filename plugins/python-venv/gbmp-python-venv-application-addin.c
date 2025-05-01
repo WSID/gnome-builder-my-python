@@ -42,6 +42,10 @@ static void
 gbmp_python_venv_application_addin_purge_python_venv_purge (GObject      *source,
                                                             GAsyncResult *result,
                                                             gpointer      user_data);
+static void
+gbmp_python_venv_application_addin_purge_python_venv_path_purge (GObject      *source,
+                                                                 GAsyncResult *result,
+                                                                 gpointer      user_data);
 //////// GTypeInstance
 
 struct _GbmpPythonVenvApplicationAddin
@@ -436,8 +440,6 @@ gbmp_python_venv_application_addin_make_python_venv_finish (GbmpPythonVenvApplic
   return ide_task_propagate_boolean (task, error);
 }
 
-
-
 void
 gbmp_python_venv_application_addin_remove_python_venv (GbmpPythonVenvApplicationAddin *addin,
                                                        GbmpPythonVenvVenvData         *data)
@@ -540,6 +542,101 @@ gbmp_python_venv_application_addin_purge_python_venv_finish (GbmpPythonVenvAppli
 
   return ide_task_propagate_boolean (task, error);
 }
+
+
+
+void
+gbmp_python_venv_application_addin_remove_python_venv_path (GbmpPythonVenvApplicationAddin *addin,
+                                                            const gchar                    *path)
+{
+  // Remove virtual environment - Just forget about it.
+  GbmpPythonVenvVenvData *data = NULL;
+
+  if (!g_hash_table_remove (addin->table_path_data, path))
+    {
+      g_warning ("Remove Python Venv path: Path not found: %s", path);
+      return;
+    }
+
+  _update_settings (addin);
+  g_object_notify_by_pspec (G_OBJECT(addin), props[PROP_PYTHON_VENV_DATAS]);
+}
+
+void
+gbmp_python_venv_application_addin_purge_python_venv_path_async (GbmpPythonVenvApplicationAddin *addin,
+                                                                 const gchar                    *path,
+                                                                 GCancellable                   *cancellable,
+                                                                 GAsyncReadyCallback             callback,
+                                                                 gpointer                        user_data)
+{
+  // Purge virutal environment - Delete its directory as well.
+  IdeTask *task = NULL;
+  GbmpPythonVenvVenvData *data = NULL;
+
+  task = ide_task_new (addin, cancellable, callback, user_data);
+  data = g_hash_table_lookup (addin->table_path_data, path);
+
+  if (data == NULL)
+    {
+      ide_task_return_new_error (task,
+                                 G_IO_ERROR,
+                                 G_IO_ERROR_UNKNOWN,
+                                 "Path not found: %s", path);
+      return;
+    }
+
+  gbmp_python_venv_venv_data_purge_async (data,
+                                          cancellable,
+                                          gbmp_python_venv_application_addin_purge_python_venv_path_purge,
+                                          task);
+}
+
+static void
+gbmp_python_venv_application_addin_purge_python_venv_path_purge (GObject      *source,
+                                                            GAsyncResult *result,
+                                                            gpointer      user_data)
+{
+  GbmpPythonVenvVenvData *data = NULL;
+  IdeTask *task = NULL;
+  GbmpPythonVenvApplicationAddin *addin = NULL;
+
+  const gchar *path = NULL;
+
+  GError *error = NULL;
+
+  data = GBMP_PYTHON_VENV_VENV_DATA (source);
+  task = IDE_TASK(user_data);
+  addin = GBMP_PYTHON_VENV_APPLICATION_ADDIN (ide_task_get_source_object (task));
+
+  path = gbmp_python_venv_venv_data_get_path (data);
+
+  gbmp_python_venv_venv_data_purge_finish(data, result, &error);
+  if (error != NULL)
+    {
+      ide_task_return_error (task, error);
+      return;
+    }
+
+  g_hash_table_remove (addin->table_path_data, path);
+  _update_settings (addin);
+  g_object_notify_by_pspec (G_OBJECT(addin), props[PROP_PYTHON_VENV_DATAS]);
+
+  ide_task_return_boolean (task, TRUE);
+}
+
+
+gboolean
+gbmp_python_venv_application_addin_purge_python_venv_path_finish (GbmpPythonVenvApplicationAddin  *addin,
+                                                                  GAsyncResult                    *result,
+                                                                  GError                         **error)
+{
+  IdeTask *task = NULL;
+
+  task = IDE_TASK(result);
+
+  return ide_task_propagate_boolean (task, error);
+}
+
 
 
 /////// GTypeInstance
@@ -888,12 +985,4 @@ _update_settings (GbmpPythonVenvApplicationAddin *addin)
   addin->python_venvs_is_setting = FALSE;
   g_ptr_array_unref (paths);
 }
-
-
-
-
-
-
-
-
 

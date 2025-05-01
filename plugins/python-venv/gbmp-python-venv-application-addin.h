@@ -59,4 +59,21 @@ gbmp_python_venv_application_addin_purge_python_venv_finish (GbmpPythonVenvAppli
                                                              GAsyncResult                    *result,
                                                              GError                         **error);
 
+void
+gbmp_python_venv_application_addin_remove_python_venv_path (GbmpPythonVenvApplicationAddin *addin,
+                                                            const gchar                    *path);
+
+void
+gbmp_python_venv_application_addin_purge_python_venv_path_async (GbmpPythonVenvApplicationAddin *addin,
+                                                                 const gchar                    *path,
+                                                                 GCancellable                   *cancellable,
+                                                                 GAsyncReadyCallback             callback,
+                                                                 gpointer                        user_data);
+
+gboolean
+gbmp_python_venv_application_addin_purge_python_venv_path_finish (GbmpPythonVenvApplicationAddin  *addin,
+                                                                  GAsyncResult                    *result,
+                                                                  GError                         **error);
+
 G_END_DECLS
+
