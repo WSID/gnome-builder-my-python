@@ -6,8 +6,19 @@
         <child>
           <object class="IdeTweaksPage" id="python_venv_page">
             <property name="title">Python Virtual Environments</property>
+            <property name="hidden-when">project</property>
             <child>
               <object class="IdeTweaksGroup">
+                <property name="title">Python Virtual Environments</property>
+                <child>
+                  <object class="IdeTweaksCaption">
+                    <property name="text">
+                      The Python Virtual Environment will be shown as runtime.
+                      You can add existing one, or make a new one.
+                    </property>
+                  </object>
+                </child>
+
                 <child>
                   <object class="IdeTweaksWidget">
                     <signal
