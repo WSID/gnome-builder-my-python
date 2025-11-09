@@ -3,7 +3,7 @@ plugins_deps = [
   dependency('libpanel-1'),
   dependency('libpeas-2'),
   dependency('libdex-1'),
-  dependency('gnome-builder-48.0'),
+  dependency('gnome-builder-49.0'),
   dependency('libsoup-3.0'),
   dependency('json-glib-1.0'),
 ]
